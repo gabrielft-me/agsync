@@ -1,0 +1,17 @@
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+dist/
+build/
+*.egg-info/
+.venv/
+venv/
+
+# This repository's own agent memory. It is `agsync init` output kept locally:
+# generated files do not belong in the repository that generates them. Paths are
+# root-anchored so the deliberately-broken fixtures under tests/ stay tracked.
+/AGENTS.md
+/.agsync.toml
+/memory/
+/tasks/

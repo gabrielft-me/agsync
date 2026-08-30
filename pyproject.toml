@@ -1,0 +1,42 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "agsync"
+version = "0.1.0"
+description = "ESLint for your agents' memory — catch decision-log rot before it reaches a new session."
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.11"
+authors = [{ name = "Gabriel Fagundes" }]
+keywords = ["ai-agents", "linter", "git-hooks", "agents-md", "decision-log", "llm"]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Intended Audience :: Developers",
+  "License :: OSI Approved :: MIT License",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Topic :: Software Development :: Quality Assurance",
+]
+dependencies = []
+
+[project.optional-dependencies]
+dev = ["pytest>=8", "ruff>=0.6"]
+
+[project.scripts]
+agsync = "agsync.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/gabrielft-me/agsync"
+Issues = "https://github.com/gabrielft-me/agsync/issues"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/agsync"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

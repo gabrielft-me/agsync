@@ -1,0 +1,42 @@
+name: agsync
+description: Lint the memory your AI agents read and write.
+branding:
+  icon: git-branch
+  color: purple
+
+inputs:
+  path:
+    description: Repository path to lint.
+    required: false
+    default: "."
+  warn-only:
+    description: Report findings but never fail the job.
+    required: false
+    default: "false"
+  version:
+    description: agsync version to install.
+    required: false
+    default: "latest"
+
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-python@v5
+      with:
+        python-version: "3.12"
+    - name: Install agsync
+      shell: bash
+      run: |
+        if [ "${{ inputs.version }}" = "latest" ]; then
+          pip install --quiet agsync
+        else
+          pip install --quiet "agsync==${{ inputs.version }}"
+        fi
+    - name: Check agent memory
+      shell: bash
+      run: |
+        args="--format github"
+        if [ "${{ inputs.warn-only }}" = "true" ]; then
+          args="$args --warn-only"
+        fi
+        agsync check "${{ inputs.path }}" $args
