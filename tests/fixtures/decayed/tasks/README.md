@@ -5,10 +5,10 @@ Derived from gaps in [`../memory/goal.md`](../memory/goal.md).
 
 | # | File | Group | Status |
 |---|------|-------|--------|
-| 09 | [09-verify-android-build.md](09-verify-android-build.md) | Setup | done |
+| 09 | [09-verify-staging-deploy.md](09-verify-staging-deploy.md) | Setup | done |
 
 ## Later phases
 
 | # | File | Status |
 |---|------|--------|
-| 25 | [25-three-ink-layers.md](25-three-ink-layers.md) | todo |
+| 25 | [25-cache-invalidation.md](25-cache-invalidation.md) | todo |

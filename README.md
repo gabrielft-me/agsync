@@ -13,14 +13,18 @@ AGENTS.md
                                       exist — this step is unsatisfiable and every session skips it
 memory/decisions.md
     11  error   unique-decision-ids   D-021 is redefined here (first defined at line 7);
-                                      9 reference(s) to D-021 are now ambiguous
+                                      7 reference(s) to D-021 are now ambiguous
+    88  error   relations-resolve     D-027 supersedes D-019, which is not defined
+tasks/25-search-indexing.md
+     3  warn    status-not-qualified  status is qualified with free text ('(all tiers except the
+                                      edge cache)'); keep the status machine-readable
 tasks/README.md
-     -  error   index-matches-files   task 26 exists (tasks/26-error-marks.md) but is absent
+     -  error   index-matches-files   task 26 exists (tasks/26-webhook-retries.md) but is absent
                                       from the index — invisible to anyone reading it
     14  error   index-matches-files   task 25: index says 'todo', file says 'done'
 
-5 decisions, 3 tasks, 2 index rows
-10 error(s), 2 warning(s)
+27 decisions, 26 tasks, 25 index rows
+9 error(s), 4 warning(s)
 ```
 
 ---
@@ -33,25 +37,34 @@ thing standing between a new agent and a cold start.
 
 **Nothing checks that it is true.**
 
-Here is what happened to one such repo after *two days* of multi-agent use — a
-real audit, not a hypothetical:
+Markdown never fails. A decision ID reused for a second, unrelated decision. A
+boot step pointing at a file nobody ever wrote. A status of `done (stub)`. An
+index row that disagrees with the task file it names. Every one of these parses,
+renders, and reviews perfectly well, and every one is read as ground truth by the
+next agent that boots.
 
-| The repo declares | Reality |
-|---|---|
-| Decision IDs are unique | `D-021` defined **twice**, with two unrelated decisions. Nine references split between the two meanings. |
-| Boot step 2: "read `memory/goal.md`" | `goal.md` **never existed**. Zero commits ever touched it. Four files link to it. Every session silently improvised past step one. |
-| `status ∈ {todo, in-progress, done, superseded}` | `done (stub)`, `done (live-key acceptance pending)`, `superseded → 11..15`. "Done" stopped meaning anything. |
-| `tasks/README.md` is the index | Task 25: `todo` in the index, `done` in its file. Task 26: complete, and **missing from the index entirely.** |
+Four things make the decay invisible, and they compound:
 
-All four invariants the repo declared about itself were violated. The design
-wasn't wrong — it's the standard `AGENTS.md` + decision-log pattern. The problem
-is that **nothing enforced it**.
+- **The reference graph is prose.** `D-021` is a bare token, not a link. Nothing
+  resolves it, so nothing notices when a second entry claims the same ID and
+  every existing reference to it silently becomes ambiguous.
+- **Contradictions live in separate files.** The index says `todo`, the task file
+  says `done`. The protocol says "read this", and the file was never created. No
+  single diff contains both halves, so no review can catch it.
+- **Every writer has a partial view.** Each session is a different agent, and
+  each edit is locally reasonable. Rot is what locally reasonable edits add up to
+  when nothing holds the whole.
+- **A false memory looks exactly like a true one.** No crash, no red test. The
+  agent reads a confident, well-formatted, wrong statement and acts on it.
+
+The failure is not hypothetical and it is not slow. A repo written by several
+agents over a couple of days will already contain several of these.
 
 > A memory system whose integrity depends on being maintained by hand degrades
 > at exactly the speed you use it.
 
-Your agents are reading this file at the start of every session and treating it
-as ground truth.
+The design is not the problem — `AGENTS.md` plus a decision log is the right
+shape. The problem is that nothing enforces it.
 
 ## The fix is not a smarter agent
 

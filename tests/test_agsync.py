@@ -1,10 +1,11 @@
 """Tests.
 
-The ``decayed`` fixture is a reduction of a real agent-memory repository that
-rotted in two days of multi-agent use. Every bug it contains was found in
-production, not invented: a duplicated decision ID, a boot protocol pointing at
-a file that never existed, statuses drifting out of the enum, and an index that
-disagrees with the task files.
+The ``decayed`` fixture is a small memory repository carrying every failure mode
+the rules exist to catch, in the shape they actually occur: a decision ID
+defined twice, a boot protocol pointing at a file nobody ever wrote, statuses
+that drifted out of the enum, an index that disagrees with the task files, a
+dependency cycle, and an undated entry. Its content is invented; the failures
+are not.
 """
 
 from __future__ import annotations
@@ -45,12 +46,12 @@ def test_split_status_separates_enum_from_free_text():
 
 def test_fields_fold_wrapped_continuation_lines():
     lines = [
-        "**Status:** done (backend noop path smoke-tested;",
-        "2026-08-08)",
+        "**Status:** done (proxy path smoke-tested;",
+        "2026-03-06)",
         "**Depends on:** 25",
     ]
     fields = parse_fields(lines, 0, len(lines))
-    assert fields["status"][0] == "done (backend noop path smoke-tested; 2026-08-08)"
+    assert fields["status"][0] == "done (proxy path smoke-tested; 2026-03-06)"
     assert fields["depends on"][0] == "25"
 
 
@@ -115,7 +116,7 @@ def test_unresolved_relation_is_reported(decayed):
 
 def test_broken_link_is_reported(decayed):
     targets = [f.message for f in decayed.findings if f.rule == "links-resolve"]
-    assert any("current-state.md" in m for m in targets)
+    assert any("state.md" in m for m in targets)
 
 
 def test_dependency_cycle_is_detected(decayed):
