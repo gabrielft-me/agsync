@@ -313,6 +313,45 @@ def test_links_are_still_checked_outside_the_protocol(tmp_path):
     assert "links-resolve" in rules_fired(check(str(tmp_path), use_baseline=False))
 
 
+# ------------------------------------------------------- empty repositories
+
+
+def test_a_repo_with_no_memory_is_not_reported_as_clean(tmp_path):
+    """"0 error(s)" on a repo with no ledger is the silent success this tool
+    exists to catch. Say there is nothing there instead."""
+    import io
+
+    from agsync.reporters import text
+
+    stream = io.StringIO()
+    text(check(str(tmp_path), use_baseline=False), stream=stream)
+    output = stream.getvalue()
+    assert "No agent memory found" in output
+    assert "agsync init" in output
+    assert "0 error(s)" not in output
+
+
+def test_json_says_whether_any_memory_was_found(tmp_path):
+    import io
+    import json as json_module
+
+    from agsync.reporters import as_json
+
+    stream = io.StringIO()
+    as_json(check(str(tmp_path), use_baseline=False), stream=stream)
+    assert json_module.loads(stream.getvalue())["summary"]["memory_found"] is False
+
+    scaffold(str(tmp_path))
+    stream = io.StringIO()
+    as_json(check(str(tmp_path), use_baseline=False), stream=stream)
+    assert json_module.loads(stream.getvalue())["summary"]["memory_found"] is True
+
+
+def test_an_empty_repo_still_exits_zero(tmp_path):
+    """Nothing to lint is not a failure."""
+    assert _run("check", str(tmp_path)).returncode == 0
+
+
 # ------------------------------------------------------------------ cli
 
 def _run(*args, cwd=None):

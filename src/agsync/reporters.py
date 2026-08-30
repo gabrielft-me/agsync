@@ -26,8 +26,21 @@ def _supports_color(stream) -> bool:
     )
 
 
+NO_MEMORY = (
+    "No agent memory found — nothing to check.\n"
+    "Looked for a protocol file (AGENTS.md), memory/ and tasks/.\n"
+    "Run `agsync init` to scaffold one."
+)
+
+
 def text(report: Report, stream=sys.stdout) -> None:
     color = _supports_color(stream)
+
+    # A repo with no memory at all must not render as a clean pass. "0 errors"
+    # on an empty repo is the same silent success this tool exists to catch.
+    if not report.memory.surface and not report.findings:
+        print(NO_MEMORY, file=stream)
+        return
 
     def paint(token: str, text_: str) -> str:
         return f"{_COLORS[token]}{text_}{_COLORS['reset']}" if color else text_
@@ -65,6 +78,7 @@ def as_json(report: Report, stream=sys.stdout) -> None:
             "suppressed": report.suppressed,
             "decisions": len(report.memory.decisions),
             "tasks": len(report.memory.tasks),
+            "memory_found": bool(report.memory.surface),
         },
         "findings": [finding.as_dict() for finding in report.findings],
     }

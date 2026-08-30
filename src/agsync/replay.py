@@ -20,6 +20,7 @@ from __future__ import annotations
 import os
 import re
 import shutil
+import stat
 import subprocess
 import sys
 import tempfile
@@ -230,13 +231,32 @@ def clone(source: str):
         _remove_tree(parent)
 
 
+def _make_writable(path: str) -> None:
+    """Clear read-only attributes across a tree, best effort."""
+    for target in (path, *(
+        os.path.join(base, name)
+        for base, dirs, files in os.walk(path)
+        for name in (*dirs, *files)
+    )):
+        try:
+            os.chmod(target, stat.S_IWRITE | stat.S_IREAD)
+        except OSError:  # pragma: no cover - best effort
+            pass
+
+
 def _remove_tree(path: str) -> None:
     """Remove a temp clone, retrying before giving up.
 
-    A single ``rmtree`` can leave an empty husk: the contents go, then
-    unlinking the directory itself fails because something held it for a
-    moment — a filesystem indexer, a lingering handle. ``ignore_errors`` makes
-    that failure invisible, which is how a stale temp directory outlives the
+    Two failure modes, neither theoretical:
+
+    * Git marks its object files read-only. On Windows a read-only file cannot
+      be unlinked at all, so the clone survives every attempt until the
+      attribute is cleared. POSIX allows the unlink, which is why this only
+      ever shows up on someone else's machine.
+    * The contents go, then unlinking the directory itself loses a race with
+      whatever held it for a moment, leaving an empty husk.
+
+    ``ignore_errors`` hides both, which is how a temp clone outlives the
     process that promised to remove it. Retrying costs microseconds.
     """
     for delay in (0, 0.05, 0.2):
@@ -245,6 +265,8 @@ def _remove_tree(path: str) -> None:
         shutil.rmtree(path, ignore_errors=True)
         if not os.path.exists(path):
             return
+        _make_writable(path)
+    shutil.rmtree(path, ignore_errors=True)
 
 
 def _resolve_ref(work: str, ref: str) -> str:
