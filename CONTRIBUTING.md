@@ -11,6 +11,14 @@ No dependencies in the runtime package. Ever. This runs inside git hooks on
 other people's machines, and a virtualenv surprise there is a broken commit for
 someone who never asked for our opinions about packaging.
 
+## Before you start
+
+[docs/design.md](docs/design.md) explains why the architecture is the way it is
+— why the parser normalizes instead of demanding, why severity is configuration,
+why fingerprints hash structured fields, why replay clones instead of checking
+out, and why intent is never inferred from a diff. Worth reading if a change
+starts to feel like it is fighting the codebase.
+
 ## Adding a rule
 
 A rule is one function. Start here — it's the easiest contribution and the most
@@ -50,7 +58,8 @@ read, that's a parser bug, not a user error. Add the shape to
 `tests/fixtures/` and make the parser absorb it.
 
 Never make a rule reach into raw markdown. If a rule needs something the model
-doesn't carry, add the field to the model.
+doesn't carry, add the field to the model. The reasoning is in
+[docs/design.md](docs/design.md).
 
 ## Style
 
