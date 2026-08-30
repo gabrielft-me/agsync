@@ -23,6 +23,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import time
 from collections.abc import Callable
 from contextlib import contextmanager
 from dataclasses import dataclass
@@ -226,7 +227,24 @@ def clone(source: str):
             _git(None, "clone", "--quiet", "--local", root, work)
         yield work
     finally:
-        shutil.rmtree(parent, ignore_errors=True)
+        _remove_tree(parent)
+
+
+def _remove_tree(path: str) -> None:
+    """Remove a temp clone, retrying before giving up.
+
+    A single ``rmtree`` can leave an empty husk: the contents go, then
+    unlinking the directory itself fails because something held it for a
+    moment — a filesystem indexer, a lingering handle. ``ignore_errors`` makes
+    that failure invisible, which is how a stale temp directory outlives the
+    process that promised to remove it. Retrying costs microseconds.
+    """
+    for delay in (0, 0.05, 0.2):
+        if delay:
+            time.sleep(delay)
+        shutil.rmtree(path, ignore_errors=True)
+        if not os.path.exists(path):
+            return
 
 
 def _resolve_ref(work: str, ref: str) -> str:

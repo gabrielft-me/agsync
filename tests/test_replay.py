@@ -17,7 +17,7 @@ import tempfile
 import pytest
 from replay_repo import build_replay_repo
 
-from agsync.replay import TEMP_PREFIX, ReplayError, is_url, replay
+from agsync.replay import TEMP_PREFIX, ReplayError, _remove_tree, is_url, replay
 
 
 @pytest.fixture(scope="module")
@@ -160,6 +160,22 @@ def test_temp_clone_is_removed_after_a_failure(fixture):
     with pytest.raises(ReplayError):
         replay(fixture.root, "no-such-branch")
     assert _leftover_temp_dirs() == before
+
+
+def test_cleanup_removes_read_only_git_objects(tmp_path):
+    """Git writes its object files read-only; the clone still has to go."""
+    victim = tmp_path / "clone"
+    (victim / "objects").mkdir(parents=True)
+    obj = victim / "objects" / "ab12"
+    obj.write_text("packed", encoding="utf-8")
+    obj.chmod(0o444)
+
+    _remove_tree(str(victim))
+    assert not victim.exists()
+
+
+def test_cleanup_is_a_no_op_on_a_path_that_is_already_gone(tmp_path):
+    _remove_tree(str(tmp_path / "never-existed"))
 
 
 # ------------------------------------------------------------------ inputs
