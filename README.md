@@ -103,34 +103,31 @@ entries from `.agsync-baseline.json` as you fix them.
 ### Replay: how bad is it already?
 
 `agsync replay` runs the same check engine at every commit in a repository's
-history and counts the pushes the gate would have stopped. It is the argument
-for the tool, measured instead of asserted.
+history and counts the pushes the gate would have stopped. Point it at a repo
+that has been running on hand-maintained memory for a while, and it will tell you
+when each violation started and how long it has been sitting there.
 
 ```console
-$ agsync replay ~/src/Shared_Brain --ref main --first-seen
+$ agsync replay . --ref main --first-seen
 sha      date        errors  rules
-c29e63a  2026-08-07       0  —
+3ad9e51  2026-03-02       0  —
 ...
-108c83f  2026-08-08       4  index-matches-files, links-resolve, unique-decision-ids
+b7e2d13  2026-03-14       4  index-matches-files, links-resolve, unique-decision-ids
 
-24 of 29 pushes would have been rejected
+18 of 42 pushes would have been rejected
 
-rule                   first failed         survived
-links-resolve          eb2c931 2026-08-07   24 commits, 15 hours (still failing at HEAD)
-index-matches-files    66aee59 2026-08-07   21 commits, 15 hours (still failing at HEAD)
-unique-decision-ids    29af037 2026-08-07   18 commits, 11 hours (still failing at HEAD)
-decision-refs-resolve  eb2c931 2026-08-07   3 commits, 9 minutes
-
-longest-lived violation: links-resolve in tasks/README.md — 24 commits —
-link target '../memory/goal.md' does not exist
+rule                  first failed         survived
+protocol-files-exist  9f1c0a4 2026-03-04   31 commits, 9 days (still failing at HEAD)
+unique-decision-ids   c40b8f2 2026-03-09   14 commits, 4 days (still failing at HEAD)
+index-matches-files   c40b8f2 2026-03-09   14 commits, 4 days (still failing at HEAD)
 ```
 
-That is the repository from the table above, and the numbers are the same story
-told precisely: the boot protocol's missing `goal.md` broke on the sixth commit
-and was still broken at HEAD, through eighteen further pushes, two days later.
+The second table is the uncomfortable one. A broken boot step usually dates from
+the commit that introduced the protocol and is usually still broken at HEAD,
+because nothing has ever checked it.
 
 Replay clones the target to a temp directory and moves HEAD only inside that
-clone, so it cannot leave your repository detached at an old commit. It accepts a
+clone, so it cannot leave your repository detached at an old commit. It takes a
 path or a clone URL, exits 0 unless the run itself fails — it reports on history,
 it does not gate it — and ignores any baseline, because the question is what the
 rules would have caught, not what someone had already told the gate to overlook.
