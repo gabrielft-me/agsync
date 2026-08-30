@@ -30,6 +30,7 @@ def links_resolve(memory: Memory):
                         path,
                         offset + 1,
                         f"link target {target!r} does not exist",
+                        subject=target,
                     )
 
 
@@ -67,6 +68,7 @@ def protocol_files_exist(memory: Memory):
                     offset + 1,
                     f"boot protocol requires {token!r}, which does not exist — "
                     f"this step is unsatisfiable and every session skips it",
+                    subject=token,
                 )
 
 
@@ -96,4 +98,5 @@ def no_orphan_memory_files(memory: Memory):
                 "never referenced from any other memory file — an agent will "
                 "not know to read it",
                 "warn",
+                subject=path,
             )

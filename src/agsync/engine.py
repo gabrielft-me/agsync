@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import os
 import tomllib
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 
 from .model import ERROR, OFF, WARN, Finding, Memory
 from .parser import parse
@@ -126,10 +126,12 @@ def check(root: str, config: Config | None = None, use_baseline: bool = True) ->
                 suppressed += 1
                 continue
             # Config overrides the severity the rule declared for itself.
+            # `replace` rather than a rebuild: a new field added to Finding
+            # must not be silently dropped here, which would change the
+            # fingerprint of every re-severitied finding.
             findings.append(
                 finding if finding.severity == severity
-                else Finding(finding.rule, finding.path, finding.line,
-                             finding.message, severity)
+                else replace(finding, severity=severity)
             )
 
     findings.sort(key=lambda f: (f.path, f.line, f.rule))

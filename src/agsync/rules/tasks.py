@@ -15,7 +15,8 @@ def status_in_enum(memory: Memory):
     for task in sorted(memory.tasks.values(), key=lambda t: t.num):
         if not task.status_raw:
             yield Finding(
-                "status-in-enum", task.path, 1, "no **Status:** field"
+                "status-in-enum", task.path, 1, "no **Status:** field",
+                subject=f"{task.num}:status",
             )
         elif task.status_base not in STATUSES:
             yield Finding(
@@ -24,6 +25,7 @@ def status_in_enum(memory: Memory):
                 task.status_line,
                 f"status {task.status_base or task.status_raw!r} is not one of "
                 f"{', '.join(STATUSES)}",
+                subject=f"{task.num}:status",
             )
 
 
@@ -45,6 +47,7 @@ def status_not_qualified(memory: Memory):
                 f"status is qualified with free text ({qualifier!r}); "
                 f"move the caveat into the body and keep the status machine-readable",
                 WARN,
+                subject=f"{task.num}:status-qualifier",
             )
 
 
@@ -63,6 +66,7 @@ def index_matches_files(memory: Memory):
                 0,
                 f"task {num} exists ({task.path}) but is absent from the index — "
                 f"invisible to anyone reading it",
+                subject=f"{num}:absent-from-index",
             )
     for row in memory.index:
         task = memory.tasks.get(row.num)
@@ -72,6 +76,7 @@ def index_matches_files(memory: Memory):
                 memory.index_path,
                 row.line,
                 f"index lists task {row.num}, but no matching file exists",
+                subject=f"{row.num}:no-such-file",
             )
             continue
         if row.status_base and task.status_base and row.status_base != task.status_base:
@@ -81,6 +86,7 @@ def index_matches_files(memory: Memory):
                 row.line,
                 f"task {row.num}: index says {row.status_base!r}, "
                 f"file says {task.status_base!r}",
+                subject=f"{row.num}:status-divergence",
             )
 
 
@@ -99,6 +105,7 @@ def task_refs_resolve(memory: Memory):
                         task.path,
                         1,
                         f"{kind} task {number}, which does not exist",
+                        subject=f"{task.num}:{kind}:{number}",
                     )
 
 
@@ -134,6 +141,7 @@ def no_dependency_cycles(memory: Memory):
             memory.tasks[first].path,
             1,
             f"dependency cycle: {cycle}",
+            subject=cycle,
         )
 
 
@@ -156,4 +164,5 @@ def blocked_task_not_done(memory: Memory):
                     f"marked done, but depends on task {number} which is "
                     f"{upstream.status_base!r}",
                     WARN,
+                    subject=f"{task.num}:blocked-by:{number}",
                 )

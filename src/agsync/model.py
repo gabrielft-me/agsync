@@ -32,14 +32,25 @@ class Finding:
     line: int
     message: str
     severity: str = ERROR
+    #: What the finding is *about* — a decision ID, a task number, a link
+    #: target. Stable identity for the baseline; see :meth:`fingerprint`.
+    subject: str = ""
 
     def fingerprint(self) -> str:
-        """Stable identity across line shifts, used by the baseline file.
+        """Stable identity for the baseline file.
 
-        Deliberately excludes ``line`` so that unrelated edits above a known
-        violation do not resurrect it as "new".
+        Hashes structured fields, never the rendered message. Messages are
+        prose written for humans: they embed line numbers, counts and
+        truncated quotes, all of which change when the surrounding file is
+        edited even though the violation has not. Hashing them meant a
+        baselined finding could resurrect itself after an unrelated edit, which
+        is the exact failure that excluding ``line`` was meant to prevent.
+
+        ``subject`` falls back to ``message`` so that a rule which does not
+        supply one still gets a usable fingerprint rather than colliding with
+        every other finding of its rule in the same file.
         """
-        raw = f"{self.rule}\x00{self.path}\x00{self.message}"
+        raw = f"{self.rule}\x00{self.path}\x00{self.subject or self.message}"
         return hashlib.sha256(raw.encode()).hexdigest()[:16]
 
     def as_dict(self) -> dict:
@@ -49,6 +60,7 @@ class Finding:
             "line": self.line,
             "message": self.message,
             "severity": self.severity,
+            "subject": self.subject,
             "fingerprint": self.fingerprint(),
         }
 

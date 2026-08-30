@@ -21,6 +21,7 @@ def unique_decision_ids(memory: Memory):
             duplicate.line,
             f"{duplicate.id} is redefined here (first defined at line {first.line}); "
             f"{references} reference(s) to {duplicate.id} are now ambiguous",
+            subject=duplicate.id,
         )
 
 
@@ -42,6 +43,7 @@ def decision_refs_resolve(memory: Memory):
                         path,
                         offset + 1,
                         f"{identifier} is referenced but never defined in the ledger",
+                        subject=identifier,
                     )
 
 
@@ -61,6 +63,7 @@ def relations_resolve(memory: Memory):
                         decision.path,
                         decision.line,
                         f"{decision.id} {kind} {target}, which is not defined",
+                        subject=f"{decision.id}:{kind}:{target}",
                     )
 
 
@@ -77,6 +80,7 @@ def no_self_reference(memory: Memory):
                 decision.path,
                 decision.line,
                 f"{decision.id} refers to itself",
+                subject=decision.id,
             )
 
 
@@ -93,6 +97,7 @@ def decision_has_date(memory: Memory):
                 decision.path,
                 decision.line,
                 f"{decision.id} has no **Date:** field",
+                subject=decision.id,
             )
 
 

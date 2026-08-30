@@ -16,7 +16,7 @@ import sys
 
 import pytest
 
-from agsync import check, parse
+from agsync import Finding, check, parse
 from agsync.engine import Config, write_baseline
 from agsync.parser import parse_fields, relations_from_title, split_status
 from agsync.rules import all_rules
@@ -189,6 +189,49 @@ def test_baseline_suppresses_existing_findings_but_not_new_ones(tmp_path):
     regressed = check(str(repo))
     assert not regressed.ok
     assert "status-in-enum" in rules_fired(regressed)
+
+
+def test_fingerprint_is_computed_from_the_subject_not_the_wording():
+    """Messages are prose for humans; they carry line numbers and counts.
+
+    Two findings about the same thing must share a fingerprint however
+    differently they happen to be phrased, or a baseline cannot hold.
+    """
+    reworded = Finding("unique-decision-ids", "memory/decisions.md", 1,
+                       "D-021 is redefined here (first defined at line 7)",
+                       subject="D-021")
+    same_thing = Finding("unique-decision-ids", "memory/decisions.md", 40,
+                         "D-021 is redefined here (first defined at line 31); "
+                         "9 reference(s) are now ambiguous",
+                         subject="D-021")
+    assert reworded.fingerprint() == same_thing.fingerprint()
+
+
+def test_fingerprint_still_separates_different_subjects():
+    first = Finding("decision-refs-resolve", "memory/decisions.md", 1, "same", subject="D-021")
+    second = Finding("decision-refs-resolve", "memory/decisions.md", 1, "same", subject="D-022")
+    assert first.fingerprint() != second.fingerprint()
+
+
+def test_fingerprint_survives_edits_above_the_first_definition(tmp_path):
+    """The regression that moved fingerprints off the rendered message.
+
+    ``unique-decision-ids`` names the *first* definition's line in its message.
+    While fingerprints hashed that message, inserting a paragraph above the
+    first definition resurrected a baselined finding — precisely the failure
+    that excluding the line number was meant to prevent.
+    """
+    import shutil
+
+    repo = tmp_path / "repo"
+    shutil.copytree(DECAYED, repo)
+    write_baseline(str(repo), check(str(repo), use_baseline=False).findings)
+
+    ledger = repo / "memory" / "decisions.md"
+    ledger.write_text("<!-- inserted above every entry -->\n\n" + ledger.read_text(),
+                      encoding="utf-8")
+
+    assert check(str(repo)).ok
 
 
 def test_fingerprint_survives_line_shifts(tmp_path):
