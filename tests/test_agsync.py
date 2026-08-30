@@ -248,6 +248,70 @@ def test_fingerprint_survives_line_shifts(tmp_path):
     assert check(str(repo)).ok
 
 
+# -------------------------------------------------- protocol file discovery
+
+
+def _protocol_repo(root, filename, body):
+    """A minimal repo whose only content is a boot protocol."""
+    (root / "memory").mkdir(parents=True, exist_ok=True)
+    (root / "memory" / "decisions.md").write_text(
+        "# Decisions\n\n## D-001 — Something\n- **Date:** 2026-01-01\n", encoding="utf-8"
+    )
+    (root / filename).write_text(body, encoding="utf-8")
+    return check(str(root), use_baseline=False)
+
+
+def test_protocol_file_is_found_whatever_its_case(tmp_path):
+    """A repo using `agents.md` must still have its protocol linted.
+
+    On a case-insensitive filesystem, probing for ``AGENTS.md`` succeeds for a
+    file really named ``agents.md``; the parser then keyed its sources by the
+    real name and looked them up under the probed one, so the protocol file
+    dropped out of the graph entirely and every rule silently skipped it.
+    """
+    report = _protocol_repo(tmp_path, "agents.md", "1. Read `memory/goal.md`\n")
+    assert "protocol-files-exist" in rules_fired(report)
+    assert parse(str(tmp_path)).protocol_path == "agents.md"
+
+
+def test_protocol_file_is_found_under_an_unlisted_spelling(tmp_path):
+    """``Agents.md`` is in no candidate list, and used to be found on neither
+    a case-sensitive nor a case-insensitive filesystem."""
+    report = _protocol_repo(tmp_path, "Agents.md", "1. Read `memory/goal.md`\n")
+    assert "protocol-files-exist" in rules_fired(report)
+
+
+def test_protocol_is_checked_when_it_links_rather_than_quotes(tmp_path):
+    """A protocol says "read X" the same way whether X is in backticks or a
+    link, so the same rule has to cover both."""
+    report = _protocol_repo(
+        tmp_path, "AGENTS.md", "1. Read [the goal](memory/goal.md)\n"
+    )
+    finding = next(f for f in report.findings if f.rule == "protocol-files-exist")
+    assert "memory/goal.md" in finding.message
+    assert "unsatisfiable" in finding.message
+
+
+def test_a_missing_protocol_file_is_reported_once_not_twice(tmp_path):
+    """`links-resolve` yields the protocol file to `protocol-files-exist`."""
+    report = _protocol_repo(
+        tmp_path, "AGENTS.md", "1. Read [the goal](memory/goal.md)\n"
+    )
+    assert "links-resolve" not in rules_fired(report)
+    assert len([f for f in report.findings if f.rule == "protocol-files-exist"]) == 1
+
+
+def test_links_are_still_checked_outside_the_protocol(tmp_path):
+    (tmp_path / "memory").mkdir()
+    (tmp_path / "memory" / "decisions.md").write_text(
+        "# Decisions\n\n## D-001 — Something\n- **Date:** 2026-01-01\n\n"
+        "See [the goal](goal.md).\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "AGENTS.md").write_text("1. Read `memory/decisions.md`\n", encoding="utf-8")
+    assert "links-resolve" in rules_fired(check(str(tmp_path), use_baseline=False))
+
+
 # ------------------------------------------------------------------ cli
 
 def _run(*args, cwd=None):

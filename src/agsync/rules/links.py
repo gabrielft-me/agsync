@@ -16,6 +16,11 @@ from . import rule
 )
 def links_resolve(memory: Memory):
     for path in memory.surface:
+        # The boot protocol is `protocol-files-exist`'s territory, in either
+        # notation. Reporting the same missing file twice, once as a broken
+        # link and once as an unsatisfiable instruction, helps nobody.
+        if path == memory.protocol_path:
+            continue
         base = os.path.dirname(os.path.join(memory.root, path))
         for offset, line in enumerate(memory.lines(path)):
             for target in RE_MD_LINK.findall(line):
@@ -51,24 +56,30 @@ def protocol_files_exist(memory: Memory):
     lines = memory.lines(path)
     if not lines:
         return
+    base = os.path.dirname(os.path.join(memory.root, path))
     seen = set()
     for offset, line in enumerate(lines):
-        for token in RE_BACKTICK_MD.findall(line):
-            if is_external(token) or token in seen:
+        # Both notations, because a protocol says "read X" the same way whether
+        # X is written in backticks or as a link, and the failure is identical.
+        for token in RE_BACKTICK_MD.findall(line) + RE_MD_LINK.findall(line):
+            if is_external(token):
+                continue
+            filename = token.split("#", 1)[0]
+            if not filename.endswith(".md") or filename in seen:
                 continue
             candidates = [
-                os.path.join(memory.root, token),
-                os.path.join(memory.root, "memory", os.path.basename(token)),
+                os.path.join(base, filename),
+                os.path.join(memory.root, "memory", os.path.basename(filename)),
             ]
             if not any(os.path.exists(candidate) for candidate in candidates):
-                seen.add(token)
+                seen.add(filename)
                 yield Finding(
                     "protocol-files-exist",
                     path,
                     offset + 1,
-                    f"boot protocol requires {token!r}, which does not exist — "
+                    f"boot protocol requires {filename!r}, which does not exist — "
                     f"this step is unsatisfiable and every session skips it",
-                    subject=token,
+                    subject=filename,
                 )
 
 

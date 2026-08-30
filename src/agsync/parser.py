@@ -37,21 +37,47 @@ def _read(path: str) -> list[str]:
         return handle.read().splitlines()
 
 
+def _entries(directory: str) -> dict[str, str]:
+    """Lowercased name -> the name as it is actually spelled on disk.
+
+    Resolving through a real listing rather than probing candidate paths is
+    what makes the lookup case-insensitive *and* case-accurate. On a
+    case-insensitive filesystem — every default macOS install — probing
+    ``AGENTS.md`` succeeds for a file really named ``agents.md``, and the
+    parser then keys its sources by the walked name and finds nothing under
+    the name it returned. The protocol file silently drops out of the graph.
+    """
+    try:
+        return {name.lower(): name for name in os.listdir(directory)}
+    except OSError:
+        return {}
+
+
 def _first(root: str, dirs, names) -> str | None:
     for directory in dirs:
+        base = os.path.join(root, directory)
+        entries = _entries(base)
         for name in names:
-            candidate = os.path.join(root, directory, name)
-            if os.path.isfile(candidate):
-                return os.path.relpath(candidate, root)
+            actual = entries.get(name.lower())
+            if actual and os.path.isfile(os.path.join(base, actual)):
+                return os.path.relpath(os.path.join(base, actual), root)
     return None
 
 
 def _first_at_root(root: str, names) -> str | None:
+    entries = _entries(root)
     for name in names:
-        candidate = os.path.join(root, name)
-        if os.path.isfile(candidate):
-            return name
+        actual = entries.get(name.lower())
+        if actual and os.path.isfile(os.path.join(root, actual)):
+            return actual
     return None
+
+
+def _dir_at_root(root: str, name: str) -> str:
+    actual = _entries(root).get(name.lower())
+    if actual and os.path.isdir(os.path.join(root, actual)):
+        return actual
+    return ""
 
 
 def split_status(raw: str) -> tuple[str, str]:
@@ -234,8 +260,9 @@ def parse(root: str) -> Memory:
     if protocol_path:
         memory.protocol_path = protocol_path
 
-    tasks_dir = "tasks" if os.path.isdir(os.path.join(memory.root, "tasks")) else ""
-    index_path = os.path.join(tasks_dir, "README.md") if tasks_dir else ""
+    tasks_dir = _dir_at_root(memory.root, "tasks")
+    index_name = _first(memory.root, (tasks_dir,), ("README.md",)) if tasks_dir else None
+    index_path = index_name or (os.path.join(tasks_dir, "README.md") if tasks_dir else "")
     if index_path:
         memory.index_path = index_path
 
