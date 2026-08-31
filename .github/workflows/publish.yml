@@ -5,6 +5,28 @@ on:
     types: [published]
 
 jobs:
+  version:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      # The tag names the release; pyproject names what actually gets uploaded.
+      # Nothing else ties them together, so a tag cut against the wrong commit
+      # publishes a version the tag does not describe — and PyPI never lets that
+      # version be replaced. Fails in seconds, in parallel with the suite.
+      - name: Tag must match the packaged version
+        env:
+          TAG: ${{ github.event.release.tag_name }}
+        run: |
+          packaged=$(python -c 'import tomllib; print(tomllib.load(open("pyproject.toml","rb"))["project"]["version"])')
+          echo "tag=$TAG packaged=$packaged"
+          if [ "$TAG" != "$packaged" ] && [ "$TAG" != "v$packaged" ]; then
+            echo "::error::release tag $TAG does not match pyproject version $packaged"
+            exit 1
+          fi
+
   test:
     runs-on: ubuntu-latest
     strategy:
@@ -23,7 +45,7 @@ jobs:
       - run: pytest -q
 
   build:
-    needs: test
+    needs: [test, version]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
