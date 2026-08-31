@@ -219,6 +219,17 @@ the task graph, the boot path. With that, a per-artifact verdict is derivable
 from the same findings and becomes a format on `check`. Without it, a second
 command would only move the problem somewhere harder to see.
 
+**A note before you file this as a bug.** The boot check inherits the gate's
+configured severity, and that is a known limitation rather than an oversight. If
+`.agsync.toml` promotes a style rule to `error`, every agent boot fails on
+something cosmetic; if it sets a structural rule to `off`, the boot check
+reports a clean ledger it never inspected. Please do not route around it — not
+with a second command, not with a hardcoded severity list in the boot path, and
+not by teaching the protocol to skip named rules. Both symptoms are one missing
+piece: a rule cannot yet say what it makes untrustworthy, so the reader has
+nothing to consult except the gate's tuning. Add that property and both
+disappear at once.
+
 So when you write a rule, choose a `subject` that identifies **the artifact**,
 not merely the violation. It is what the baseline hashes today, and it is the
 seed of that classification tomorrow.
