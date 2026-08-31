@@ -112,6 +112,11 @@ The baseline records a fingerprint per violation that survives line shifts, so
 unrelated edits above a known problem don't resurrect it as "new". Delete
 entries from `.agsync-baseline.json` as you fix them.
 
+A fingerprint does include the **path**, so moving or renaming a file
+un-suppresses everything baselined in it. `check` says so when it happens —
+"already in the baseline under a different path" — rather than presenting an old
+violation as new; re-record with `agsync check --baseline` after a move.
+
 **The baseline governs the gate, and never the reader.** It records what should
 stop a push — a decision about your rollout, not a statement about what is true.
 An agent about to act on this memory needs the whole picture, including the parts

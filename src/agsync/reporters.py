@@ -67,6 +67,17 @@ def text(report: Report, stream=sys.stdout) -> None:
     if report.suppressed:
         summary += f", {report.suppressed} suppressed by baseline"
     print(paint("error" if report.errors else "reset", summary), file=stream)
+    if report.baseline_moved:
+        was, now = report.baseline_moved[0]
+        count = len(report.baseline_moved)
+        subject = "1 finding is" if count == 1 else f"{count} findings are"
+        print(
+            paint("warn", f"{subject} already in "
+                          f"the baseline under a different path ({was} -> {now}). "
+                          f"A fingerprint includes the path, so moving a file "
+                          f"un-suppresses it. Re-record with `agsync check --baseline`."),
+            file=stream,
+        )
     if report.baseline_stale:
         print(
             paint("warn", "baseline is in an older format; re-record it with "

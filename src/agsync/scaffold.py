@@ -11,8 +11,7 @@ Before doing ANY work:
 
 1. `git pull`
 2. `agsync check --no-baseline` — if it fails, do not start. Repair what is
-   unambiguous; report what needs a human. An index row that disagrees with its
-   task file is unambiguous; which of two entries sharing an ID was meant is not.
+   unambiguous (a stale index row); report what needs a human (a duplicated ID).
 3. Read `memory/goal.md` — what success means for this project
 4. Read `memory/decisions.md` — why the system is the way it is
 5. Read `memory/state.md` — what is delivered, and what is merely written
@@ -34,13 +33,9 @@ Before finishing:
 13. `agsync check` — a failure means the memory is inconsistent, not that your
     code is wrong — then push
 
-A memory commit never contains code. A commit touching `memory/` or `tasks/`
-touches nothing else, and its message starts with `memory:`.
+A memory commit never contains code, and its message starts with `memory:`.
 
 Never edit `memory/goal.md`. It is set by a human.
-
-`--no-baseline` at step 2 is deliberate: the baseline records what should stop a
-push, not what is true.
 """
 
 GOAL_MD = """\

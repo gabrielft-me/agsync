@@ -68,6 +68,9 @@ class Report:
     suppressed: int = 0
     #: The baseline was written by an older format and should be re-recorded.
     baseline_stale: bool = False
+    #: (recorded path, current path) for findings the baseline already holds
+    #: under a different path — almost always a file that was moved.
+    baseline_moved: list[tuple[str, str]] = field(default_factory=list)
 
     @property
     def errors(self) -> list[Finding]:
@@ -93,6 +96,10 @@ class Baseline:
     """
 
     fingerprints: set[str] = field(default_factory=set)
+    #: (rule, subject) -> the paths it was recorded at. A fingerprint includes
+    #: the path, so a moved file un-suppresses itself; this is what lets the
+    #: report say so instead of presenting an old violation as new.
+    paths: dict[tuple[str, str], set[str]] = field(default_factory=dict)
     version: int = BASELINE_VERSION
     #: Written by an older format. Still honoured, but it cannot survive a
     #: change to the fingerprint, so the user is told to re-record it.
@@ -108,20 +115,15 @@ def load_baseline(root: str) -> Baseline:
 
     version = int(data.get("version", 1))
     if version >= 2:
-        entries = data.get("violations") or []
-        return Baseline(
-            fingerprints={
-                Finding(
-                    entry.get("rule", ""),
-                    entry.get("path", ""),
-                    0,
-                    "",
-                    subject=entry.get("subject", ""),
-                ).fingerprint()
-                for entry in entries
-            },
-            version=version,
-        )
+        fingerprints = set()
+        paths: dict[tuple[str, str], set[str]] = {}
+        for entry in data.get("violations") or []:
+            rule = entry.get("rule", "")
+            path = entry.get("path", "")
+            subject = entry.get("subject", "")
+            fingerprints.add(Finding(rule, path, 0, "", subject=subject).fingerprint())
+            paths.setdefault((rule, subject), set()).add(path)
+        return Baseline(fingerprints=fingerprints, paths=paths, version=version)
 
     # v1 stored bare hashes. They still match today, so honour them — but they
     # carry nothing to re-derive from, which is the whole reason for v2.
@@ -167,6 +169,7 @@ def check(root: str, config: Config | None = None, use_baseline: bool = True) ->
 
     findings: list[Finding] = []
     suppressed = 0
+    moved: list[tuple[str, str]] = []
     for rule in all_rules():
         severity = config.severity_for(rule.name, rule.default_severity)
         if severity == OFF:
@@ -177,6 +180,12 @@ def check(root: str, config: Config | None = None, use_baseline: bool = True) ->
             if finding.fingerprint() in baseline.fingerprints:
                 suppressed += 1
                 continue
+            # Not suppressed — but is this the same violation at a new path?
+            recorded = baseline.paths.get(
+                (finding.rule, finding.subject or finding.message)
+            )
+            if recorded and finding.path not in recorded:
+                moved.append((min(recorded), finding.path))
             # Config overrides the severity the rule declared for itself.
             # `replace` rather than a rebuild: a new field added to Finding
             # must not be silently dropped here, which would change the
@@ -192,6 +201,7 @@ def check(root: str, config: Config | None = None, use_baseline: bool = True) ->
         memory=memory,
         suppressed=suppressed,
         baseline_stale=baseline.stale,
+        baseline_moved=moved,
     )
 
 

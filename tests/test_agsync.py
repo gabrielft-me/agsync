@@ -424,6 +424,65 @@ def test_a_current_baseline_is_not_flagged(tmp_path):
     assert load_baseline(str(repo)).stale is False
 
 
+def test_a_moved_file_is_reported_as_moved_not_as_new(tmp_path):
+    """A fingerprint includes the path, so a rename un-suppresses the file.
+
+    That is defensible but not obvious, and a user meets it as an unexplained
+    failure. v2 entries carry rule and subject, so the report can say what
+    actually happened.
+    """
+    import shutil
+
+    repo = tmp_path / "repo"
+    shutil.copytree(DECAYED, repo)
+    write_baseline(str(repo), check(str(repo), use_baseline=False).findings)
+    assert check(str(repo)).ok
+
+    tasks = repo / "tasks"
+    (tasks / "25-cache-invalidation.md").rename(tasks / "25-renamed.md")
+    index = tasks / "README.md"
+    index.write_text(
+        index.read_text(encoding="utf-8").replace(
+            "25-cache-invalidation.md", "25-renamed.md"
+        ),
+        encoding="utf-8",
+    )
+
+    report = check(str(repo))
+    assert report.baseline_moved, "the rename must be recognised, not reported as new"
+    was, now = report.baseline_moved[0]
+    assert "25-cache-invalidation.md" in was
+    assert "25-renamed.md" in now
+
+
+def test_an_ordinary_new_violation_is_not_called_a_move(tmp_path):
+    import shutil
+
+    repo = tmp_path / "repo"
+    shutil.copytree(DECAYED, repo)
+    write_baseline(str(repo), check(str(repo), use_baseline=False).findings)
+
+    (repo / "tasks" / "27-new.md").write_text(
+        "# Task 27 — New\n\n**Status:** shipped\n", encoding="utf-8"
+    )
+    report = check(str(repo))
+    assert not report.ok
+    assert not report.baseline_moved
+
+
+def test_the_packaged_version_matches_the_module(tmp_path):
+    """The release workflow checks the tag against pyproject and nothing checks
+    the module, so `agsync --version` could disagree with what was uploaded."""
+    import tomllib
+
+    from agsync import __version__
+
+    root = os.path.join(os.path.dirname(__file__), "..")
+    with open(os.path.join(root, "pyproject.toml"), "rb") as handle:
+        packaged = tomllib.load(handle)["project"]["version"]
+    assert __version__ == packaged
+
+
 # ---------------------------------------------------------- task ownership
 
 
