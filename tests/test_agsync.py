@@ -149,6 +149,31 @@ def test_scaffolded_repo_passes_cleanly(tmp_path):
     assert report.ok, [f.message for f in report.errors]
 
 
+def test_scaffolded_protocol_validates_before_it_reads(tmp_path):
+    """The check has to run before the ledger is read, not only before a push.
+
+    A commit hook cannot stop an agent from believing something at boot; by the
+    time it fires the false premise has already been acted on.
+    """
+    scaffold(str(tmp_path))
+    lines = (tmp_path / "AGENTS.md").read_text(encoding="utf-8").splitlines()
+    steps = [line for line in lines if line[:2] in ("1.", "2.", "3.")]
+
+    assert "agsync check" in steps[1], "the check must be boot step 2"
+    assert "--no-baseline" in steps[1], "the reader must not inherit the gate's baseline"
+    assert "goal.md" in steps[2], "the check must come before the first read"
+
+
+def test_scaffolded_protocol_tells_a_failing_agent_what_to_do(tmp_path):
+    """Stopping dead is a worse failure than proceeding slightly wrong."""
+    scaffold(str(tmp_path))
+    protocol = (tmp_path / "AGENTS.md").read_text(encoding="utf-8")
+    assert "Repair what is unambiguous" in protocol
+    assert "report what" in protocol
+    # The reactive advice is still right; it just cannot be the only mention.
+    assert protocol.count("agsync check") >= 2
+
+
 def test_scaffold_is_idempotent(tmp_path):
     scaffold(str(tmp_path))
     assert scaffold(str(tmp_path)) == []

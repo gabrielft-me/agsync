@@ -91,6 +91,7 @@ git hook without a virtualenv surprise.
 agsync check                    # lint the repo
 agsync check --warn-only        # first run: see everything, fail nothing
 agsync check --baseline         # accept today's mess, fail on new mess
+agsync check --no-baseline      # what an agent runs at boot: everything, unsuppressed
 agsync check --format github    # inline annotations on the PR diff
 agsync check --format json      # for your own tooling
 agsync replay <repo>            # how many past pushes the gate would have stopped
@@ -101,8 +102,8 @@ agsync install-hooks            # gate commits locally
 
 ### Adopting an existing repo
 
-Do not turn everything on at once — a linter that rejects 20 of your 29 pushes
-on day one gets uninstalled on day one.
+Do not turn everything on at once — a linter that rejects most of your pushes on
+day one gets uninstalled on day one.
 
 ```bash
 agsync check --warn-only    # 1. look at the damage
@@ -112,6 +113,18 @@ agsync check --baseline     # 2. freeze it; new violations now fail
 The baseline records a fingerprint per violation that survives line shifts, so
 unrelated edits above a known problem don't resurrect it as "new". Delete
 entries from `.agsync-baseline.json` as you fix them.
+
+**The baseline governs the gate, and never the reader.** It records what should
+stop a push — a decision about your rollout, not a statement about what is true.
+An agent about to act on this memory needs the whole picture, including the parts
+you chose not to block, so the boot protocol runs:
+
+```bash
+agsync check --no-baseline
+```
+
+Suppressing a finding is how you keep working. Believing it was suppressed
+because it was fixed is how a new session acts on something false.
 
 ### Replay: how bad is it already?
 

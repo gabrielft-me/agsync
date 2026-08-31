@@ -10,22 +10,30 @@ AGENTS_MD = """\
 Before doing ANY work:
 
 1. `git pull`
-2. Read `memory/goal.md` — what success means for this project
-3. Read `memory/decisions.md` — why the system is the way it is
-4. Read `memory/state.md` — what is delivered, and what is merely written
-5. Read your assigned file in `tasks/`
+2. `agsync check --no-baseline` — validate the memory before you trust it.
+   If it fails, do not start your task. Repair what is unambiguous; report what
+   needs a human. An index row disagreeing with its task file is unambiguous.
+   Which of two entries sharing an ID the references meant is not.
+3. Read `memory/goal.md` — what success means for this project
+4. Read `memory/decisions.md` — why the system is the way it is
+5. Read `memory/state.md` — what is delivered, and what is merely written
+6. Read your assigned file in `tasks/`
 
 Before finishing:
 
-6. Append a decision entry for anything a future agent could not infer from the diff
-7. Update your task file's `status` and `## Log`
-8. `git pull`, resolve conflicts, then `git push`
+7. Append a decision entry for anything a future agent could not infer from the diff
+8. Update your task file's `status` and `## Log`
+9. `agsync check` — a failure means the memory is inconsistent, not that your
+   code is wrong
+10. `git pull`, resolve conflicts, then `git push`
 
 Never edit `memory/goal.md`. It is set by a human.
 
-Run `agsync check` before pushing. A failing check means the memory is
-inconsistent, not that your code is wrong.
+Step 2 passes `--no-baseline` on purpose. The baseline governs the gate, never
+the reader: it records what should stop a push, not what is true. A violation
+someone chose not to block is still a violation you would be believing.
 """
+
 
 GOAL_MD = """\
 # Goal

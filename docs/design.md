@@ -12,7 +12,8 @@ One idea holds the rest together:
 Agents do not decay memory through carelessness. They decay it because each
 session sees a slice, every edit is locally reasonable, and nothing anywhere
 checks the whole. So the tool's job is not to be clever. It is to be the thing
-that always runs, at the one point nobody can skip: the push.
+that always runs, at the two points nobody can skip: the boot, where memory is
+believed, and the push, where it is written.
 
 ---
 
@@ -169,7 +170,60 @@ Do not spend a model on what a parser solves.
 
 ---
 
-## 6. One report contract
+## 6. Two consumers, one command
+
+`agsync check` answers two different questions with the same findings.
+
+**The gate** asks *should this be blocked* — at `pre-commit`, at `pre-receive`,
+in CI. **The reader** asks *what here can I not trust* — an agent at boot, about
+to read a ledger and act on it. That second consumer is the one the tool exists
+for, and it is the one that is easy to forget, because the gate is where the
+code runs.
+
+Two consequences follow, and both are in the scaffolded boot protocol:
+
+- **Validation happens before the read, not only after the write.** The
+  protocol runs `check` at step 2, before the agent opens `memory/goal.md`. A
+  ledger with two entries sharing an ID makes an agent pick one and work from a
+  false premise, and a commit hook fires far too late to prevent that.
+- **The baseline governs the gate and never the reader**, so the boot check
+  passes `--no-baseline`. A baseline records what should stop a push — a
+  decision about your rollout. It is not a claim that anything was fixed, and an
+  agent about to act on the memory needs the parts you chose not to block.
+
+A failing boot check tells the agent to **repair what is unambiguous and report
+what needs judgement**. An index row that disagrees with its task file is
+mechanical. Which of two entries sharing an ID the references meant is not.
+Instructing an agent to simply stop is worse than it sounds: a stalled
+autonomous agent is a more expensive failure than a slightly wrong one.
+
+### Why this is not a second command
+
+The obvious move is a separate reader-facing command — something that answers
+"is this memory safe to act on" instead of listing violations. It is deliberately
+not built. The engine is where the value is, and duplicating its surface invites
+divergence: a rule enabled for the gate but not for the reader is a lie by
+omission, and a reader that silently checks less is worse than one that checks
+bluntly.
+
+But the one-command answer has a real defect, and it is worth knowing before you
+add a rule. **Severity is configuration, and it is tuned for the gate.** A repo
+that promotes a cosmetic rule to `error` stalls every agent boot. A repo that
+sets `unique-decision-ids` to `off` makes the boot check certify a ledger it
+never inspected. The reader's verdict should not depend on the gate's tuning,
+and today it does.
+
+The fix is a property on the rule rather than a new command: an intrinsic,
+non-configurable statement of *what a finding makes untrustworthy* — the ledger,
+the task graph, the boot path. With that, a per-artifact verdict is derivable
+from the same findings and becomes a format on `check`. Without it, a second
+command would only move the problem somewhere harder to see.
+
+So when you write a rule, choose a `subject` that identifies **the artifact**,
+not merely the violation. It is what the baseline hashes today, and it is the
+seed of that classification tomorrow.
+
+## 7. One report contract
 
 Every finding is `{rule, path, line, message, severity, subject}`. Text output,
 JSON, and GitHub annotations all derive from those fields alone, so adding an
