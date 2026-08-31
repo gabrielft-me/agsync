@@ -10,30 +10,38 @@ AGENTS_MD = """\
 Before doing ANY work:
 
 1. `git pull`
-2. `agsync check --no-baseline` — validate the memory before you trust it.
-   If it fails, do not start your task. Repair what is unambiguous; report what
-   needs a human. An index row disagreeing with its task file is unambiguous.
-   Which of two entries sharing an ID the references meant is not.
+2. `agsync check --no-baseline` — if it fails, do not start. Repair what is
+   unambiguous; report what needs a human. An index row that disagrees with its
+   task file is unambiguous; which of two entries sharing an ID was meant is not.
 3. Read `memory/goal.md` — what success means for this project
 4. Read `memory/decisions.md` — why the system is the way it is
 5. Read `memory/state.md` — what is delivered, and what is merely written
 6. Read your assigned file in `tasks/`
 
+Before starting work, claim the task:
+
+7. `git pull`
+8. In the task file set `**Owner:**` to your name, `**Claimed at:**` to today's
+   date, and the status to `in-progress`
+9. Commit that change alone and push it. If the push is rejected, `git pull` and
+   read the owner again — someone claimed it first. Take a different task.
+
 Before finishing:
 
-7. Append a decision entry for anything a future agent could not infer from the diff
-8. Update your task file's `status` and `## Log`
-9. `agsync check` — a failure means the memory is inconsistent, not that your
-   code is wrong
-10. `git pull`, resolve conflicts, then `git push`
+10. `git pull`
+11. Append a decision entry for anything a future agent could not infer from the diff
+12. Update your task file's `status` and `## Log`
+13. `agsync check` — a failure means the memory is inconsistent, not that your
+    code is wrong — then push
+
+A memory commit never contains code. A commit touching `memory/` or `tasks/`
+touches nothing else, and its message starts with `memory:`.
 
 Never edit `memory/goal.md`. It is set by a human.
 
-Step 2 passes `--no-baseline` on purpose. The baseline governs the gate, never
-the reader: it records what should stop a push, not what is true. A violation
-someone chose not to block is still a violation you would be believing.
+`--no-baseline` at step 2 is deliberate: the baseline records what should stop a
+push, not what is true.
 """
-
 
 GOAL_MD = """\
 # Goal
@@ -98,6 +106,8 @@ TASK_EXAMPLE = """\
 # Task 00 — Example task
 
 **Status:** todo
+**Owner:**
+**Claimed at:**
 **Depends on:**
 **Blocks:**
 **Related decisions:** D-001
@@ -145,6 +155,18 @@ set -e
 previous="@CHAIN@/pre-commit"
 if [ -x "$previous" ]; then
   "$previous" "$@" || exit $?
+fi
+
+# Memory commits stay separate from code commits so that
+# `git log -- memory/ tasks/` reads as a timeline. This lives in the hook, not
+# in a rule: a rule sees parsed files, and giving every rule access to git
+# history to catch one of them would be a bad trade. Warn, never block.
+mem=$(git diff --cached --name-only -- AGENTS.md memory tasks)
+code=$(git diff --cached --name-only -- . ':(exclude)AGENTS.md' ':(exclude)memory' \
+  ':(exclude)tasks' ':(exclude).agsync' ':(exclude).agsync.toml')
+if [ -n "$mem" ] && [ -n "$code" ]; then
+  echo "agsync: this commit mixes memory and code." >&2
+  echo "        Commit memory/ and tasks/ on their own, prefixed 'memory:'." >&2
 fi
 
 if ! command -v agsync >/dev/null 2>&1; then

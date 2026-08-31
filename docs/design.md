@@ -234,7 +234,51 @@ So when you write a rule, choose a `subject` that identifies **the artifact**,
 not merely the violation. It is what the baseline hashes today, and it is the
 seed of that classification tomorrow.
 
-## 7. One report contract
+## 7. Coordination is a commit, not a service
+
+The protocol presupposes several agents and, for a long time, implemented no
+way for them to stay out of each other's way: no lock, no claim, no owner. Two
+agents pick the same task, both do the work, and the collision surfaces at push
+time when the effort is already spent.
+
+The fix does not need a coordination service, because git already arbitrates
+races. An agent claims a task by writing `**Owner:**` and `**Claimed at:**` into
+the task file, committing that alone, and pushing it before it starts work. Two
+simultaneous claims mean one push is rejected; that agent pulls, sees an owner,
+and picks something else. The lock is a commit, and the arbitration is the
+thing every agent already has to do anyway.
+
+This is why the ownership rules are shaped the way they are. They do not
+implement locking — git does that. They only notice when the *record* of a claim
+has stopped being usable: an in-progress task nobody owns is an error, because
+it is a claim nobody made. A claim left sitting, or one with no readable date,
+is a warning, because "too long" is a guess and a guess must never fail a push.
+One owner holding several tasks at once is also a warning: it is a workload
+smell, not a false statement about the world, and the error/warning line in this
+codebase is exactly that distinction.
+
+**What would change this.** A service earns its cost when git stops being able
+to answer the question — several code repositories sharing one memory, claims
+that must expire without anyone pushing, or presence ("is that agent still
+alive?") which a commit fundamentally cannot express. None of those apply yet.
+Keeping the truth in git means a service stays a possible future rather than
+becoming a dependency, and nothing has to be undone to add one later.
+
+### Why commit discipline is not a rule
+
+Memory commits stay separate from code commits so that `git log -- memory/
+tasks/` reads as a timeline for someone new to the project. That is worth
+enforcing, but it cannot be a rule: rules receive a parsed `Memory` and never
+touch git. Giving every rule access to history to catch this one would break
+`check` on a directory that is not a repository, break replay (which walks
+detached commits where "the commit being made" does not exist), and make a
+whole rule set git-dependent to serve a single check.
+
+So it lives where the commit is actually visible — the `pre-commit` hook — and
+it warns rather than blocking, because commit shape is a convention about
+readability, not a fact about whether the memory is true.
+
+## 8. One report contract
 
 Every finding is `{rule, path, line, message, severity, subject}`. Text output,
 JSON, and GitHub annotations all derive from those fields alone, so adding an

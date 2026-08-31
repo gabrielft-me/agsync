@@ -186,6 +186,12 @@ def _parse_tasks(memory: Memory, tasks_dir: str) -> None:
         if "status" in fields:
             task.status_raw, task.status_line = fields["status"]
             task.status_base, task.status_qualifier = split_status(task.status_raw)
+        if "owner" in fields:
+            task.owner, task.claim_line = fields["owner"]
+        if "claimed at" in fields:
+            task.claimed_at = fields["claimed at"][0]
+            if not task.owner:
+                task.claim_line = fields["claimed at"][1]
         task.depends_on = RE_TASK_NUM.findall(fields.get("depends on", ("", 0))[0])
         task.blocks = RE_TASK_NUM.findall(fields.get("blocks", ("", 0))[0])
         task.decisions = RE_DECISION_ID.findall(

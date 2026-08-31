@@ -2,8 +2,14 @@
 
 from __future__ import annotations
 
+from datetime import UTC, date, datetime
+
 from ..model import ERROR, STATUSES, WARN, Finding, Memory
 from . import rule
+
+#: How long a claim may sit before it is called stale. A guess, deliberately —
+#: which is exactly why the rule that uses it warns rather than errors.
+STALE_AFTER_DAYS = 7
 
 
 @rule(
@@ -166,3 +172,99 @@ def blocked_task_not_done(memory: Memory):
                     WARN,
                     subject=f"{task.num}:blocked-by:{number}",
                 )
+
+
+# ------------------------------------------------------------------- claims
+#
+# Claiming is a commit. An agent writes its name into the task file and pushes
+# that before starting work; if two agents claim at once, the loser's push is
+# rejected and it learns there is an owner. Git is the lock, so these rules only
+# have to notice when the record of a claim stops being usable.
+
+
+@rule(
+    "in-progress-needs-owner",
+    ERROR,
+    "A task is in progress with nobody named as its owner.",
+)
+def in_progress_needs_owner(memory: Memory):
+    for task in sorted(memory.tasks.values(), key=lambda t: t.num):
+        if task.status_base == "in-progress" and not task.owner:
+            yield Finding(
+                "in-progress-needs-owner",
+                task.path,
+                task.status_line,
+                "in progress with no **Owner:** — another agent cannot tell "
+                "whether this is being worked on or was abandoned",
+                subject=f"{task.num}:owner",
+            )
+
+
+@rule(
+    "stale-claim",
+    WARN,
+    "A task has been claimed for a long time, or its claim carries no usable date.",
+)
+def stale_claim(memory: Memory):
+    # UTC, not local: agents claiming from different machines must agree on
+    # how old a claim is, and a claim date carries no timezone.
+    today = datetime.now(UTC).date()
+    for task in sorted(memory.tasks.values(), key=lambda t: t.num):
+        if task.status_base != "in-progress" or not task.owner:
+            continue
+        claimed = _as_date(task.claimed_at)
+        if claimed is None:
+            yield Finding(
+                "stale-claim",
+                task.path,
+                task.claim_line,
+                f"claimed by {task.owner!r} with no readable **Claimed at:** "
+                f"date, so nobody can tell whether the claim is still live",
+                WARN,
+                subject=f"{task.num}:claim-date",
+            )
+            continue
+        age = (today - claimed).days
+        if age > STALE_AFTER_DAYS:
+            yield Finding(
+                "stale-claim",
+                task.path,
+                task.claim_line,
+                f"claimed by {task.owner!r} {age} days ago and still in "
+                f"progress; if that agent is gone the task is stuck",
+                WARN,
+                subject=f"{task.num}:stale",
+            )
+
+
+@rule(
+    "one-claim-per-owner",
+    WARN,
+    "An owner holds more than one task in progress at the same time.",
+)
+def one_claim_per_owner(memory: Memory):
+    held: dict[str, list] = {}
+    for task in sorted(memory.tasks.values(), key=lambda t: t.num):
+        if task.status_base == "in-progress" and task.owner:
+            held.setdefault(task.owner, []).append(task)
+    for owner, tasks in sorted(held.items()):
+        if len(tasks) < 2:
+            continue
+        numbers = ", ".join(task.num for task in tasks)
+        for task in tasks:
+            yield Finding(
+                "one-claim-per-owner",
+                task.path,
+                task.claim_line,
+                f"{owner!r} holds {len(tasks)} tasks at once ({numbers}); "
+                f"each claim tells other agents this one is being worked on",
+                WARN,
+                subject=f"{owner}:multiple-claims",
+            )
+
+
+def _as_date(raw: str):
+    try:
+        return date.fromisoformat(raw.strip()[:10])
+    except ValueError:
+        return None

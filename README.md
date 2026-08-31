@@ -77,8 +77,6 @@ not survive a new agent joining.
 ## Install
 
 ```bash
-uvx agsync check          # try it, no install
-pipx install agsync       # keep it
 pip install agsync
 ```
 
@@ -161,6 +159,30 @@ rules would have caught, not what someone had already told the gate to overlook.
 One caveat worth stating out loud: replay judges old commits by today's rules.
 The claim is "these would be rejected now", not "these were rejected then".
 
+### Two agents, one task
+
+Nothing stops two agents picking the same task and discovering it at push time,
+after both have done the work. agsync uses git as the lock rather than adding a
+service: an agent claims a task by setting `**Owner:**` and `**Claimed at:**`,
+committing that alone, and pushing it *before* starting. If two claim at once
+the second push is rejected — it pulls, sees an owner, and takes another task.
+
+```
+**Status:** in-progress
+**Owner:** agent-a
+**Claimed at:** 2026-08-31
+```
+
+The generated boot protocol spells this out, and three rules keep the record
+honest: an in-progress task with no owner is an error, a claim left sitting or
+carrying no readable date is a warning, and so is one owner holding several
+tasks at once.
+
+Memory commits also stay separate from code commits, so `git log -- memory/
+tasks/` reads as a timeline. The installed `pre-commit` hook warns when a commit
+mixes the two; it never blocks, because commit shape is a convention rather than
+a fact about the memory.
+
 ## Rules
 
 | Rule | Default | Catches |
@@ -178,6 +200,9 @@ The claim is "these would be rejected now", not "these were rejected then".
 | `task-refs-resolve` | error | A dependency on a task that doesn't exist |
 | `no-dependency-cycles` | error | Tasks that can never be executed in any order |
 | `blocked-task-not-done` | warn | A task marked done while its dependency is still open |
+| `in-progress-needs-owner` | error | A task in progress that nobody has claimed |
+| `stale-claim` | warn | A claim held for a long time, or with no usable date |
+| `one-claim-per-owner` | warn | One owner holding several tasks in progress at once |
 | `no-orphan-memory-files` | warn | A memory file nothing references, so no agent reads it |
 
 ## Configuration
@@ -203,7 +228,7 @@ Also readable from `[tool.agsync]` in `pyproject.toml`.
 Or directly:
 
 ```yaml
-- run: pipx install agsync && agsync check --format github
+- run: pip install agsync && agsync check --format github
 ```
 
 Findings render inline on the pull request diff. Pair it with branch protection

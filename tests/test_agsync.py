@@ -14,6 +14,7 @@ import json
 import os
 import subprocess
 import sys
+from datetime import UTC, datetime
 
 import pytest
 
@@ -168,8 +169,10 @@ def test_scaffolded_protocol_tells_a_failing_agent_what_to_do(tmp_path):
     """Stopping dead is a worse failure than proceeding slightly wrong."""
     scaffold(str(tmp_path))
     protocol = (tmp_path / "AGENTS.md").read_text(encoding="utf-8")
-    assert "Repair what is unambiguous" in protocol
-    assert "report what" in protocol
+    # Collapsed: the protocol is wrapped prose and a reflow is not a regression.
+    flowed = " ".join(protocol.split())
+    assert "Repair what is unambiguous" in flowed
+    assert "report what needs a human" in flowed
     # The reactive advice is still right; it just cannot be the only mention.
     assert protocol.count("agsync check") >= 2
 
@@ -375,6 +378,136 @@ def test_json_says_whether_any_memory_was_found(tmp_path):
 def test_an_empty_repo_still_exits_zero(tmp_path):
     """Nothing to lint is not a failure."""
     assert _run("check", str(tmp_path)).returncode == 0
+
+
+# ---------------------------------------------------------- task ownership
+
+
+def _claim_repo(root, tasks):
+    """A minimal repo whose only interesting content is task ownership.
+
+    ``tasks`` is a list of ``(number, status, extra field lines)``.
+    """
+    (root / "memory").mkdir(parents=True, exist_ok=True)
+    (root / "memory" / "decisions.md").write_text(
+        "# Decisions\n\n## D-001 — Something\n- **Date:** 2026-01-01\n", encoding="utf-8"
+    )
+    (root / "tasks").mkdir(exist_ok=True)
+    rows = []
+    for num, status, extra in tasks:
+        name = f"{num}-t.md"
+        (root / "tasks" / name).write_text(
+            f"# Task {num} — T\n\n**Status:** {status}\n{extra}\n", encoding="utf-8"
+        )
+        rows.append(f"| {num} | [{name}]({name}) | {status} |")
+    (root / "tasks" / "README.md").write_text(
+        "# Tasks\n\nSee [`../memory/decisions.md`](../memory/decisions.md).\n\n"
+        "| # | File | Status |\n|---|------|--------|\n" + "\n".join(rows) + "\n",
+        encoding="utf-8",
+    )
+    (root / "AGENTS.md").write_text("1. Read `memory/decisions.md`\n", encoding="utf-8")
+    return check(str(root), use_baseline=False)
+
+
+def _today():
+    return datetime.now(UTC).date().isoformat()
+
+
+def test_parser_reads_task_ownership(tmp_path):
+    _claim_repo(tmp_path, [("01", "in-progress", "**Owner:** agent-a\n**Claimed at:** 2026-08-30")])
+    task = parse(str(tmp_path)).tasks["01"]
+    assert task.owner == "agent-a"
+    assert task.claimed_at == "2026-08-30"
+
+
+def test_in_progress_without_an_owner_is_an_error(tmp_path):
+    """An unowned in-progress task is a claim nobody made."""
+    report = _claim_repo(tmp_path, [("01", "in-progress", "")])
+    finding = next(f for f in report.findings if f.rule == "in-progress-needs-owner")
+    assert finding.severity == "error"
+
+
+def test_a_task_nobody_started_needs_no_owner(tmp_path):
+    report = _claim_repo(tmp_path, [("01", "todo", "")])
+    assert "in-progress-needs-owner" not in rules_fired(report)
+
+
+def test_an_old_claim_warns_rather_than_blocking(tmp_path):
+    """How long is too long is a guess, so it must never fail a push."""
+    report = _claim_repo(
+        tmp_path, [("01", "in-progress", "**Owner:** agent-a\n**Claimed at:** 2020-01-01")]
+    )
+    stale = [f for f in report.findings if f.rule == "stale-claim"]
+    assert stale and all(f.severity == "warn" for f in stale)
+    assert "days ago" in stale[0].message
+
+
+def test_a_fresh_claim_is_not_stale(tmp_path):
+    report = _claim_repo(
+        tmp_path, [("01", "in-progress", f"**Owner:** agent-a\n**Claimed at:** {_today()}")]
+    )
+    assert "stale-claim" not in rules_fired(report)
+
+
+def test_a_claim_with_no_usable_date_cannot_be_judged(tmp_path):
+    report = _claim_repo(tmp_path, [("01", "in-progress", "**Owner:** agent-a")])
+    finding = next(f for f in report.findings if f.rule == "stale-claim")
+    assert "no readable" in finding.message
+
+
+def test_one_owner_holding_two_tasks_is_a_warning(tmp_path):
+    claim = f"**Owner:** agent-a\n**Claimed at:** {_today()}"
+    report = _claim_repo(
+        tmp_path, [("01", "in-progress", claim), ("02", "in-progress", claim)]
+    )
+    held = [f for f in report.findings if f.rule == "one-claim-per-owner"]
+    assert len(held) == 2, "both claims should be named, not just one"
+    assert all(f.severity == "warn" for f in held)
+
+
+def test_two_owners_with_one_task_each_is_ordinary(tmp_path):
+    today = _today()
+    report = _claim_repo(
+        tmp_path,
+        [
+            ("01", "in-progress", f"**Owner:** agent-a\n**Claimed at:** {today}"),
+            ("02", "in-progress", f"**Owner:** agent-b\n**Claimed at:** {today}"),
+        ],
+    )
+    assert "one-claim-per-owner" not in rules_fired(report)
+
+
+def test_a_finished_task_keeps_its_owner_without_complaint(tmp_path):
+    report = _claim_repo(
+        tmp_path, [("01", "done", "**Owner:** agent-a\n**Claimed at:** 2020-01-01")]
+    )
+    assert "stale-claim" not in rules_fired(report)
+    assert "one-claim-per-owner" not in rules_fired(report)
+
+
+def test_scaffolded_task_carries_the_claim_fields(tmp_path):
+    scaffold(str(tmp_path))
+    body = (tmp_path / "tasks" / "00-example.md").read_text(encoding="utf-8")
+    assert "**Owner:**" in body
+    assert "**Claimed at:**" in body
+
+
+def test_scaffolded_protocol_teaches_claiming_and_commit_discipline(tmp_path):
+    scaffold(str(tmp_path))
+    protocol = (tmp_path / "AGENTS.md").read_text(encoding="utf-8")
+    assert "**Owner:**" in protocol
+    # Git is the lock: the losing agent learns from a rejected push.
+    assert "push is rejected" in protocol
+    assert "never contains code" in protocol
+    assert "memory:" in protocol
+
+
+def test_the_hook_watches_for_mixed_commits():
+    """Commit shape is the hook's business; a rule never sees a commit."""
+    from agsync.scaffold import PRE_COMMIT
+
+    assert "mixes memory and code" in PRE_COMMIT
+    assert ":(exclude)memory" in PRE_COMMIT
 
 
 # ------------------------------------------------------------------ cli

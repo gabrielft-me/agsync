@@ -96,6 +96,11 @@ class Task:
     status_base: str = ""
     status_qualifier: str = ""
     status_line: int = 1
+    #: Who is working on this right now, and since when. Claiming is a commit,
+    #: so git arbitrates the race — see docs/design.md.
+    owner: str = ""
+    claimed_at: str = ""
+    claim_line: int = 1
     depends_on: list[str] = field(default_factory=list)
     blocks: list[str] = field(default_factory=list)
     decisions: list[str] = field(default_factory=list)
