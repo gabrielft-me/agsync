@@ -226,7 +226,7 @@ decision-has-date = "off"
 ## CI
 
 ```yaml
-- uses: gabrielft-me/agsync@v0.1.0
+- uses: gabrielft-me/agsync@v0.1.1
 ```
 
 Or directly:
