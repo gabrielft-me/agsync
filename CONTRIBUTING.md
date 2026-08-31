@@ -51,6 +51,25 @@ def no_undated_decisions(memory):
 - **Default to `warn` if it encodes a style opinion**, `error` only if the
   memory is now factually wrong.
 
+## Checking CI after a push
+
+Resolve the run by the sha you pushed. Never by recency.
+
+```bash
+sha=$(git rev-parse HEAD)
+run=$(gh run list --workflow=CI --json databaseId,headSha \
+  -q "[.[] | select(.headSha == \"$sha\")][0].databaseId")
+[ -n "$run" ] || { echo "no CI run for $sha yet — wait and retry" >&2; exit 1; }
+gh run watch "$run" --exit-status
+```
+
+`gh run list --limit 1` races the push: for the first few seconds your run does
+not exist yet, so it returns the previous one. That has already produced a green
+report for a run belonging to a different commit *and* a different workflow —
+the repo has two, and the newest run was a release publish. A passing result you
+did not verify is worse than no result, so the lookup must fail loudly when
+there is no run for your sha rather than quietly answering about another one.
+
 ## Parser changes
 
 The parser normalizes; it never demands. If a real repo uses a format we don't

@@ -9,7 +9,7 @@ description = "ESLint for your agents' memory — catch decision-log rot before 
 readme = "README.md"
 license = "MIT"
 requires-python = ">=3.11"
-authors = [{ name = "Gabriel Fagundes" }]
+authors = [{ name = "Gabriel Teixeira" }]
 keywords = ["ai-agents", "linter", "git-hooks", "agents-md", "decision-log", "llm"]
 classifiers = [
   "Development Status :: 3 - Alpha",

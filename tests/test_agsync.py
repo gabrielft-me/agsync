@@ -19,7 +19,7 @@ from datetime import UTC, datetime
 import pytest
 
 from agsync import Finding, check, parse
-from agsync.engine import Config, write_baseline
+from agsync.engine import BASELINE_VERSION, Config, load_baseline, write_baseline
 from agsync.parser import parse_fields, relations_from_title, split_status
 from agsync.rules import all_rules
 from agsync.scaffold import scaffold
@@ -378,6 +378,50 @@ def test_json_says_whether_any_memory_was_found(tmp_path):
 def test_an_empty_repo_still_exits_zero(tmp_path):
     """Nothing to lint is not a failure."""
     assert _run("check", str(tmp_path)).returncode == 0
+
+
+def test_baseline_records_what_a_violation_is_about(tmp_path):
+    """A bare hash cannot be re-derived, so a fingerprint change would silently
+    un-suppress everything the user had accepted."""
+    import shutil
+
+    repo = tmp_path / "repo"
+    shutil.copytree(DECAYED, repo)
+    write_baseline(str(repo), check(str(repo), use_baseline=False).findings)
+
+    payload = json.loads((repo / ".agsync-baseline.json").read_text(encoding="utf-8"))
+    assert payload["version"] == BASELINE_VERSION
+    assert payload["violations"]
+    entry = payload["violations"][0]
+    assert {"rule", "path", "subject"} == set(entry)
+    assert check(str(repo)).ok
+
+
+def test_an_older_baseline_is_honoured_and_flagged(tmp_path):
+    """v1 hashes still match today. They are kept working, and reported, rather
+    than dropped — dropping them would fail a build on an unrelated upgrade."""
+    import shutil
+
+    repo = tmp_path / "repo"
+    shutil.copytree(DECAYED, repo)
+    findings = check(str(repo), use_baseline=False).findings
+    (repo / ".agsync-baseline.json").write_text(
+        json.dumps({"version": 1, "fingerprints": sorted({f.fingerprint() for f in findings})}),
+        encoding="utf-8",
+    )
+
+    report = check(str(repo))
+    assert report.ok, "an old baseline must keep suppressing what it suppressed"
+    assert report.baseline_stale
+
+
+def test_a_current_baseline_is_not_flagged(tmp_path):
+    import shutil
+
+    repo = tmp_path / "repo"
+    shutil.copytree(DECAYED, repo)
+    write_baseline(str(repo), check(str(repo), use_baseline=False).findings)
+    assert load_baseline(str(repo)).stale is False
 
 
 # ---------------------------------------------------------- task ownership

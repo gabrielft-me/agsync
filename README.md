@@ -207,7 +207,7 @@ a fact about the memory.
 
 ## Configuration
 
-`.agsync.toml`. Severity is configuration; rule logic is not.
+`.agsync.toml`, or `agsync.toml`. Severity is configuration; rule logic is not.
 
 ```toml
 exclude = ["archive/"]
@@ -217,12 +217,11 @@ status-not-qualified = "warn"
 decision-has-date = "off"
 ```
 
-Also readable from `[tool.agsync]` in `pyproject.toml`.
 
 ## CI
 
 ```yaml
-- uses: gabrielft-me/agsync@v1
+- uses: gabrielft-me/agsync@v0.1.0
 ```
 
 Or directly:
@@ -255,7 +254,9 @@ def no_undated_tasks(memory):
             yield Finding("no-undated-tasks", task.path, 1, "no date")
 ```
 
-**One report contract.** Every finding is `{rule, path, line, message, severity}`.
+**One report contract.** Every finding is
+`{rule, path, line, message, severity, subject}`, and JSON adds the `fingerprint`
+the baseline matches on.
 Text output, JSON, and GitHub annotations all derive from it, so a new output
 format never touches a rule.
 

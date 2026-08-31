@@ -67,6 +67,12 @@ def text(report: Report, stream=sys.stdout) -> None:
     if report.suppressed:
         summary += f", {report.suppressed} suppressed by baseline"
     print(paint("error" if report.errors else "reset", summary), file=stream)
+    if report.baseline_stale:
+        print(
+            paint("warn", "baseline is in an older format; re-record it with "
+                          "`agsync check --baseline` so it survives an upgrade"),
+            file=stream,
+        )
 
 
 def as_json(report: Report, stream=sys.stdout) -> None:

@@ -13,6 +13,10 @@ from .rules import all_rules
 
 CONFIG_NAMES = (".agsync.toml", "agsync.toml")
 BASELINE_NAME = ".agsync-baseline.json"
+#: Bumped whenever the baseline file or the fingerprint inputs change, so an
+#: older file is recognised and reported rather than silently resurrecting
+#: every violation it was suppressing.
+BASELINE_VERSION = 2
 VALID_SEVERITIES = (ERROR, WARN, OFF)
 
 
@@ -62,6 +66,8 @@ class Report:
     findings: list[Finding]
     memory: Memory
     suppressed: int = 0
+    #: The baseline was written by an older format and should be re-recorded.
+    baseline_stale: bool = False
 
     @property
     def errors(self) -> list[Finding]:
@@ -76,22 +82,68 @@ class Report:
         return not self.errors
 
 
-def load_baseline(root: str) -> set:
+@dataclass
+class Baseline:
+    """Violations a repo has chosen to accept.
+
+    Entries record what the finding is *about* — rule, path, subject — rather
+    than only its hash, so a future change to the fingerprint can re-derive
+    them instead of quietly un-suppressing everything the user accepted. A
+    baseline is also read by humans in a pull request; opaque hex is not.
+    """
+
+    fingerprints: set[str] = field(default_factory=set)
+    version: int = BASELINE_VERSION
+    #: Written by an older format. Still honoured, but it cannot survive a
+    #: change to the fingerprint, so the user is told to re-record it.
+    stale: bool = False
+
+
+def load_baseline(root: str) -> Baseline:
     path = os.path.join(root, BASELINE_NAME)
     if not os.path.isfile(path):
-        return set()
+        return Baseline()
     with open(path, encoding="utf-8") as handle:
         data = json.load(handle)
-    return set(data.get("fingerprints", []))
+
+    version = int(data.get("version", 1))
+    if version >= 2:
+        entries = data.get("violations") or []
+        return Baseline(
+            fingerprints={
+                Finding(
+                    entry.get("rule", ""),
+                    entry.get("path", ""),
+                    0,
+                    "",
+                    subject=entry.get("subject", ""),
+                ).fingerprint()
+                for entry in entries
+            },
+            version=version,
+        )
+
+    # v1 stored bare hashes. They still match today, so honour them — but they
+    # carry nothing to re-derive from, which is the whole reason for v2.
+    return Baseline(
+        fingerprints=set(data.get("fingerprints", [])), version=1, stale=True
+    )
 
 
 def write_baseline(root: str, findings: list[Finding]) -> str:
     path = os.path.join(root, BASELINE_NAME)
+    seen = {}
+    for finding in findings:
+        seen[finding.fingerprint()] = {
+            "rule": finding.rule,
+            "path": finding.path,
+            "subject": finding.subject or finding.message,
+        }
     payload = {
-        "version": 1,
+        "version": BASELINE_VERSION,
         "note": "Pre-existing violations, ignored by `agsync check`. "
                 "Delete entries as you fix them; never add by hand.",
-        "fingerprints": sorted({f.fingerprint() for f in findings}),
+        "violations": [seen[key] for key in sorted(seen)],
     }
     with open(path, "w", encoding="utf-8") as handle:
         json.dump(payload, handle, indent=2)
@@ -111,7 +163,7 @@ def check(root: str, config: Config | None = None, use_baseline: bool = True) ->
     """Parse ``root`` and run every enabled rule over it."""
     config = config or Config.load(root)
     memory = parse(root)
-    baseline = load_baseline(root) if use_baseline else set()
+    baseline = load_baseline(root) if use_baseline else Baseline()
 
     findings: list[Finding] = []
     suppressed = 0
@@ -122,7 +174,7 @@ def check(root: str, config: Config | None = None, use_baseline: bool = True) ->
         for finding in rule.fn(memory):
             if _excluded(finding.path, config.exclude):
                 continue
-            if finding.fingerprint() in baseline:
+            if finding.fingerprint() in baseline.fingerprints:
                 suppressed += 1
                 continue
             # Config overrides the severity the rule declared for itself.
@@ -135,7 +187,12 @@ def check(root: str, config: Config | None = None, use_baseline: bool = True) ->
             )
 
     findings.sort(key=lambda f: (f.path, f.line, f.rule))
-    return Report(findings=findings, memory=memory, suppressed=suppressed)
+    return Report(
+        findings=findings,
+        memory=memory,
+        suppressed=suppressed,
+        baseline_stale=baseline.stale,
+    )
 
 
 def _validate_config_keys(section: dict) -> None:
